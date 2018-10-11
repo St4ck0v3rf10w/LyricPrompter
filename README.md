@@ -51,9 +51,10 @@ This works best with the screen orientation rotated 90° or 270°
 ```sh
 $ sudo nano /boot/config.txt
 ```
-Add or edit the following:
+Add one of the following:
 ```nano
 display_rotate=1
+display_rotate=3
 ```
 
 #### Symlink udev rules
@@ -150,6 +151,11 @@ use the full features of the program, <strong>Previous</strong>,
 ease of navigation. See the [Hardware](#hardware) section for
 details.
 
+When using the browser, the bar across the bottom of the screen
+displays what each of the three buttons would do in any given context.
+When lyrics are displayed for a specific song, the top bar displays the
+song title and page information.
+
 #### Localization
 Interface language is in English (sorry, that's all I know). If you 
 care to modify the language for your locale, modify the strings in the 
@@ -218,13 +224,18 @@ outlines a fairly effective debounce circuit:
 [See Schematic](./img/debounce_schematic.png)
 
 Without a hardware debounce circuit, the pedals/buttons should be
-connected to:
+connected from ground (pin 39) to:
 
 * Previous: GPIO 13
 * Menu: GPIO 19
 * Next: GPIO 26
 
 (these are pins 33,35,37)
+
+<p align="center">
+  <img src="./img/no-debounce_bb.png" alt="Direct Connection"
+       width="600" height="645">
+</p>
 
 The exact GPIO pins can be altered in the bin/lyricsbrowser.py file
 ```python
