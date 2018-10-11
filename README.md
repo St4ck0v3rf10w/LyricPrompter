@@ -1,3 +1,4 @@
+# On Stage Lyrics Browser
 The On Stage Lyrics Browser is an attempt to build a simple teleprompt
 system for on-stage performances. 
 
@@ -136,7 +137,9 @@ If no USB device is present at boot, the browser should alert you to
 browser will be notified and will automatically display the set list.
 
 A USB device can be removed and reconnected at any point. The browser 
-will be notified and act accordingly.
+will be notified and act accordingly. Since the USB filesystem is 
+mounted Read-Only, there should be no ill-effect from removal without
+proper unmounting.
 
 #### Browsing
 The browser depends on GPIO interrupts for navigation. There is no 
@@ -169,6 +172,28 @@ _e = {
     'page': "Page"
 }
 ```
+
+#### Advanced
+
+The browser runs a socket server that listens for the lyrics directory
+path to be passed in. It's possible to script Next, Previous, and 
+Menu/Select with 3rd-party software or custom scripts of your choosing.
+By sending 'n', 'p', or 'm' to /tmp/lyricsbrowser.sock, the browser
+responds accordingly.
+
+NEXT command
+```sh
+echo -n 'n' | nc -w1 -U /tmp/lyricsbrowser.sock 
+```
+PREVIOUS command
+```sh
+echo -n 'p' | nc -w1 -U /tmp/lyricsbrowser.sock 
+```
+MENU/SELECT command
+```sh
+echo -n 'm' | nc -w1 -U /tmp/lyricsbrowser.sock 
+```
+
 
 ## Hardware
 #### Requirements:
