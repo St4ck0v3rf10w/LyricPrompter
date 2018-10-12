@@ -24,7 +24,8 @@ _e = {
     'prev_song': "Prev Song",
     'next_page': "Next Page",
     'next_song': "Next Song",
-    'page': "Page"
+    'page': "Page",
+    'empty': "Empty File - No Text Found"
 }
 
 socket_path = "/tmp/lyricsbrowser.sock"
@@ -252,6 +253,10 @@ def loadsong():
                 first = False
             else:
                 displaylines.append(" - %s" % partline)
+
+    # If no text lines found in file, display error
+    if len(displaylines) == 0:
+        displaylines.append(_e['empty'])
 
     # Split lyrics into pages if too long
     for page in [displaylines[i:i+screenlines-5] for i in range(0, len(displaylines), screenlines-5)]:

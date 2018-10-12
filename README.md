@@ -1,13 +1,19 @@
 # On Stage Lyrics Browser
-The On Stage Lyrics Browser is an attempt to build a simple teleprompt
-system for on-stage performances. 
+The On Stage Lyrics Browser is a footswitch-controlled teleprompter 
+ system for live performance. Its based on the Raspberry Pi and provides
+ a simple curses-based interface to list text files from a USB flash 
+ drive directory and display their content.
 
-The collection of scripts here, properly installed on a Raspberry Pi, 
-will produce a simple, text-based browser for lyrics on a USB device.
+The collection of scripts here, installed on a Raspberry Pi, 
+will produce a basic, text-based browser for lyrics on a USB device.
 
-[Setup](#to-install) is fairly straightforward, and [preparing the files/USB flash
-drive](#to-use) are simple. Interfacing [pedals](#hardware) with the Raspberry PI takes a bit
-of work to operate properly, but can be easily achieved.
+[Setup](#to-install) is fairly straightforward, and
+ [preparing the files/USB flashdrive](#to-use) are simple. Interfacing
+ [pedals](#hardware) with the Raspberry PI takes a little bit
+ of work to operate properly, but is not an overly complex task.
+ 
+The following screenshots show the two views available: Set List and
+Lyrics View:
 
 <p align="center">
   <img src="./img/set-list.png" alt="Set List Example"
@@ -20,11 +26,15 @@ of work to operate properly, but can be easily achieved.
 </p>
 
  
-## Included:
+## Software Included:
  * a udev rule to auto mount/umount USB upon insertion/removal
  * a script that controls the interface display functions
  * a script that sends mount information to the interface
  * a script that sends umount information to the interface
+ 
+You will also find schematics in the img directory to assist with
+ building debounce circuits, or to illustrate how to connect 
+ footswitches without hardware debouncing.
 
 ## To install:
 This assumes a recent copy of Raspian is installed and everything is
@@ -263,3 +273,6 @@ https://www.axllent.org/docs/view/auto-mounting-usb-storage/
 
 switch debounce circuit from:\
 https://www.logiswitch.net/switch-debounce-diy_tutorial/method-4-hardware-debounce-for-spst-switches
+
+rotating the raspberry pi screen from:\
+https://www.raspberrypi-spy.co.uk/2017/11/how-to-rotate-the-raspberry-pi-display-output/
