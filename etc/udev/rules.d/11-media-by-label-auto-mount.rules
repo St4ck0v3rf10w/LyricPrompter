@@ -15,10 +15,10 @@ ACTION=="add", ENV{ID_FS_TYPE}=="vfat|ntfs", ENV{mount_options}="$env{mount_opti
 # Mount the device  
 ACTION=="add", RUN+="/bin/mkdir -p /media/%E{dir_name}", RUN+="/bin/mount -o $env{mount_options} /dev/%k /media/%E{dir_name}"  
 # Trigger script for adding drive to media and alerting lyric monitor
-ACTION=="add", RUN+="/home/pi/on-stage-lyrics-browser/bin/usbmount /dev/%k /media/%E{dir_name}"
+ACTION=="add", RUN+="/home/tc/on-stage-lyrics-browser/bin/usbmount /dev/%k /media/%E{dir_name}"
 LABEL="media_by_label_auto_mount_end"
 DEVNAME!="/dev/sd[a-z]", GOTO="media_by_devname_auto_umount_end"
 # Clean up after removal  
-ACTION=="remove", ENV{dir_name}!="", RUN+="/home/pi/on-stage-lyrics-browser/bin/usbumount", RUN+="/bin/umount -l /media/%E{dir_name}", RUN+="/bin/rmdir /media/%E{dir_name}"
+ACTION=="remove", ENV{dir_name}!="", RUN+="/home/tc/on-stage-lyrics-browser/bin/usbumount", RUN+="/bin/umount -l /media/%E{dir_name}", RUN+="/bin/rmdir /media/%E{dir_name}"
 # Exit  
 LABEL="media_by_devname_auto_umount_end"

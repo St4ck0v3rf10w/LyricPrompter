@@ -1,9 +1,9 @@
 #!/usr/bin/python3.5
 
+import re
 import curses
 import socketserver
 import sys
-import RPi.GPIO as GPIO
 from threading import Thread, current_thread
 from queue import Queue
 from os import listdir, unlink
@@ -30,10 +30,6 @@ _e = {
 
 socket_path = "/tmp/lyricsbrowser.sock"
 lyrics_path = "."
-
-gpiopin_prev = 13
-gpiopin_next = 26
-gpiopin_menu = 19
 
 filelist = []
 q = Queue()
@@ -62,6 +58,129 @@ class ThreadedSocketRequestHandler(socketserver.BaseRequestHandler):
 # Socket Server Thread
 class ThreadedSocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     pass
+
+#---------------------------------color and text format-------------------------------------------------------------
+def init_colors():
+    curses.start_color()
+    curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)     # Roter Text auf schwarzem Hintergrund
+    curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)   # Grüner Text auf schwarzem Hintergrund
+    curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Gelber Text auf schwarzem Hintergrund
+    curses.init_pair(4, curses.COLOR_BLUE, curses.COLOR_BLACK)    # Blauer Text auf schwarzem Hintergrund
+    curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK) # Magentafarbener Text auf schwarzem Hintergrund
+    curses.init_pair(6, curses.COLOR_CYAN, curses.COLOR_BLACK)    # Cyanfarbener Text auf schwarzem Hintergrund
+    curses.init_pair(7, curses.COLOR_WHITE, curses.COLOR_BLACK)   # Weißer Text auf schwarzem Hintergrund
+    curses.init_pair(8, curses.COLOR_RED, curses.COLOR_WHITE)     # Roter Text auf weißem Hintergrund
+    curses.init_pair(9, curses.COLOR_GREEN, curses.COLOR_BLUE)    # Grüner Text auf blauem Hintergrund
+    curses.init_pair(10, curses.COLOR_YELLOW, curses.COLOR_CYAN)  # Gelber Text auf cyanfarbenem Hintergrund
+
+
+    # Farbzuordnung per Dictionary
+    color_dict = {
+        "red": curses.color_pair(1),
+        "green": curses.color_pair(2),
+        "yellow": curses.color_pair(3),
+        "blue": curses.color_pair(4),
+        "magenta": curses.color_pair(5),
+        "cyan": curses.color_pair(6),
+        "white": curses.color_pair(7),
+        "red_white": curses.color_pair(8),
+        "green_blue": curses.color_pair(9),
+        "yellow_cyan": curses.color_pair(10)
+    }
+
+    return color_dict
+
+# Funktion, um die Länge des Texts ohne Tags zu berechnen
+def get_visible_length(text, tag_regex):
+    # Entferne alle ignorierten Tags aus dem Text für die Längenberechnung
+    cleaned_text = re.sub(tag_regex, '', text)
+    return len(cleaned_text)
+
+def preprocess_text(lines, max_width, tag_regex=None):
+    #lines = text.splitlines()  # Behalte vorhandene Zeilenumbrüche bei
+    formatted_lines = []  # Liste für die formatierten Zeilen
+
+    for line in lines:
+        words = line.split()
+        current_line = ""
+        current_line_length = 0  # Verfolge die sichtbare Länge der aktuellen Zeile
+
+        for word in words:
+            word_length = get_visible_length(word, tag_regex)
+            
+            # Überprüfen, ob das Hinzufügen des nächsten Wortes die maximale Breite überschreiten würde
+            if current_line_length + word_length + (1 if current_line else 0) > max_width:
+                # Füge die aktuelle Zeile der Liste hinzu
+                formatted_lines.append(current_line.rstrip())
+                # Starte eine neue Zeile mit dem aktuellen Wort
+                current_line = word
+                current_line_length = word_length  # Setze die neue Zeilenlänge auf die Länge des Worts
+            else:
+                # Füge das Wort zur aktuellen Zeile hinzu
+                if current_line:
+                    current_line += " " + word
+                    current_line_length += word_length + 1  # Inklusive Leerzeichen
+                else:
+                    current_line = word
+                    current_line_length = word_length
+        
+        # Füge die letzte Zeile der Liste hinzu
+        formatted_lines.append(current_line)
+
+    return formatted_lines
+
+# Dynamische Regex-Erstellung basierend auf den Tags im Dictionary
+def create_tag_regex(color_dict):
+    # Erstelle eine Regex, die alle Tags aus dem Dictionary umfasst
+    tags = '|'.join(re.escape(tag) for tag in color_dict.keys())
+    return re.compile(f'</?({tags})>')
+
+# Parser und Zentrierung des Textes
+def parse_and_display_text(subwin, text_lines, width, color_dict, pattern):
+    current_color = curses.A_NORMAL  # Initiale Farbe
+    
+    # Iteriere über die Zeilen
+    for line in text_lines:
+        current_pos = 0  # Position des letzten unberührten Teils der Zeile
+        display_text = ""  # Gesamter Text ohne Tags für die Zentrierung
+        parts = []  # Liste von (Textstück, Farbe) für spätere Ausgabe
+
+        # Durchsuche die aktuelle Zeile nach Tags
+        for match in pattern.finditer(line):
+            # Text vor dem Tag ausgeben
+            raw_text = line[current_pos:match.start()]
+            if raw_text:
+                parts.append((raw_text, current_color))  # Speichere den Text und die Farbe
+                display_text += raw_text  # Füge den Text zum Gesamten hinzu (ohne Tags)
+
+            # Ändere die aktuelle Farbe basierend auf dem Tag
+            current_color = color_dict.get(match.group(1), curses.A_NORMAL)
+
+            # Setze die Position nach dem Tag
+            current_pos = match.end()
+
+        # Füge den Rest der Zeile nach dem letzten Tag hinzu
+        raw_text = line[current_pos:]
+        if raw_text:
+            parts.append((raw_text, current_color))
+            display_text += raw_text
+
+        # Zentriere den Text, indem wir die x-Position berechnen
+        x_pos = (width - len(display_text)) // 2
+
+        # Setze den Cursor an die berechnete Position
+        subwin.move(subwin.getyx()[0], x_pos)
+
+        # Gebe den zentrierten Text mit Farben aus
+        for part, color in parts:
+            subwin.attron(color)
+            subwin.addstr(part)
+            subwin.attroff(color)
+
+        # Zeilenumbruch für die nächste Zeile
+        if line != text_lines[-1]:
+            subwin.addstr("\n")
+#----------------------------------------------------------------------------------------------
 
 
 # Helper - set global path string
@@ -111,14 +230,19 @@ def updatetitlebar(clear=False):
 
 
 # Main Window update function
-def updatemainwindow(content=None):
+def updatemainwindow(content=None, colored=False):
     if content is None:
         content = []
     displaywin.clear()
-    displaylinecounter = 0
-    for displayline in content:
-        displaywin.addstr(displaylinecounter, 1, displayline)
-        displaylinecounter += 1
+    
+    if colored is True:
+        height, width = displaywin.getmaxyx()
+        parse_and_display_text(displaywin, content, width - 2, colors, tag_pattern)
+    else:
+        displaylinecounter = 0
+        for displayline in content:
+            displaywin.addstr(displaylinecounter, 1, displayline)
+            displaylinecounter += 1
     displaywin.refresh()
 
 
@@ -154,10 +278,13 @@ def nexthandler(*args):
 
     if len(filelist) > 0:
         if menuopen:
-            selectedsong = (selectedsong + 1) % len(filelist)
-            displaysetlist()
+            loadsong()
+            selectedpage = 0
+            displaysong()
+          # selectedsong = (selectedsong + 1) % len(filelist)
+          # displaysetlist()
         else:
-            if islastpage():
+            #if islastpage():
                 if islastsong():
                     displaysetlist(True)
                 else:
@@ -165,9 +292,9 @@ def nexthandler(*args):
                     selectedsong += 1
                     loadsong()
                     displaysong()
-            else:
-                selectedpage += 1
-                displaysong()
+            #else:
+                #selectedpage += 1
+                #displaysong()
 
 
 # Handle PREV operations
@@ -176,17 +303,18 @@ def prevhandler(*args):
     global selectedpage
 
     if len(filelist) > 0:
-        if menuopen:
-            selectedsong = selectedsong - 1 if selectedsong > 0 else len(filelist) - 1
-            displaysetlist()
-        else:
+        #if menuopen:
+        #    selectedsong = selectedsong - 1 if selectedsong > 0 else len(filelist) - 1
+         #   displaysetlist()
+        #else:
+        if not menuopen:
             if selectedsong == 0:
                 displaysetlist(True)
             else:
                 if selectedpage == 0:
                     selectedsong -= 1
                     loadsong()
-                    selectedpage = calclastpage()
+                    selectedpage = 0#calclastpage()
                     displaysong()
                 else:
                     selectedpage -= 1
@@ -199,12 +327,38 @@ def menuhandler(*args):
     global selectedpage
 
     if len(filelist) > 0:
-        if menuopen:
-            loadsong()
-            selectedpage = 0
-            displaysong()
-        else:
+        #if menuopen:
+           # loadsong()
+           # selectedpage = 0
+           # displaysong()
+        #else:
+        if not menuopen:
             displaysetlist(True)
+
+def uphandler(*args):
+    global selectedsong
+    global selectedpage
+    
+    if menuopen:
+        selectedsong = selectedsong - 1 if selectedsong > 0 else len(filelist) - 1
+        displaysetlist()
+    else:
+        if selectedpage != 0:
+            selectedpage -= 1
+            displaysong()
+
+def downhandler(*args):
+    global selectedsong
+    global selectedpage
+    
+    if menuopen:
+        selectedsong = (selectedsong + 1) % len(filelist)
+        displaysetlist()
+    else:
+        if not islastpage():
+            selectedpage += 1
+            displaysong()
+
 
 
 # Load set list from path
@@ -241,25 +395,29 @@ def loadsong():
     songpath = join(lyrics_path, filelist[selectedsong])
     with open(songpath) as f:
         all_lines = f.readlines()
+        
+    displaylines = preprocess_text( all_lines, screencols - 4, tag_pattern)
 
-    # Loop through temp array, split lines if too long
-    for fileline in all_lines:
-        fileline = fileline.rstrip()
-        parsedline = parseline(fileline)
-        first = True
-        for partline in parsedline:
-            if first:
-                displaylines.append(partline)
-                first = False
-            else:
-                displaylines.append(" - %s" % partline)
-
-    # If no text lines found in file, display error
+ #   # Loop through temp array, split lines if too long
+ #   for fileline in all_lines:
+ #       fileline = fileline.rstrip()
+ #       parsedline = parseline(fileline)
+ #       first = True
+ #       for partline in parsedline:
+ #           if first:
+ #               displaylines.append(partline)
+ #               first = False
+ #           else:
+ #               displaylines.append(" - %s" % partline)
+ #
+ #   # If no text lines found in file, display error
     if len(displaylines) == 0:
         displaylines.append(_e['empty'])
-
+ 
+    #pagesize in lines
+    displaypagesize = (displaywin.getmaxyx()[0])-1
     # Split lyrics into pages if too long
-    for page in [displaylines[i:i+screenlines-5] for i in range(0, len(displaylines), screenlines-5)]:
+    for page in [displaylines[i:i+displaypagesize] for i in range(0, len(displaylines), displaypagesize)]:
         curfilelyrics.append(page)
 
 
@@ -359,7 +517,7 @@ def displaysong():
             if selectedpage < calclastpage() else _e['next_song'] if selectedsong < len(filelist) - 1 else _e['menu']
     )
 
-    updatemainwindow(content=curfilelyrics[selectedpage])
+    updatemainwindow(content=curfilelyrics[selectedpage],colored=True)
 
 
 # Interface Wrapper
@@ -369,10 +527,19 @@ def curseswrapper(stdscr):
     global topbar
     global displaywin
     global bottombar
+    global colors
+    global tag_pattern
+    
+     # Farben initialisieren und Dictionary mit Farben zurückbekommen
+    colors = init_colors()
+
+    # Dynamische Regex basierend auf den Tags im color_dict erstellen
+    tag_pattern = create_tag_regex(colors)
 
     screenlines = curses.LINES - 1
     screencols = curses.COLS
-
+    stdscr.nodelay(True)
+    
     # Clear screen
     stdscr.clear()
 
@@ -384,7 +551,7 @@ def curseswrapper(stdscr):
 
     # Setup Display Window
     stdscr.hline(1, 0, '_', screencols)
-    displaywin = stdscr.subwin(screenlines-5, screencols, 2, 0)
+    displaywin = stdscr.subwin(screenlines-4, screencols, 2, 0)
     stdscr.hline(screenlines-2, 0, '_', screencols)
 
     # Bottom Bar
@@ -398,6 +565,16 @@ def curseswrapper(stdscr):
 
     # Handle queue events from socket
     while True:
+        key = stdscr.getch()
+        if key == curses.KEY_LEFT:
+            prevhandler()
+        elif key == curses.KEY_RIGHT:
+            nexthandler()
+        elif key == curses.KEY_UP:
+            uphandler()
+        elif key == curses.KEY_DOWN:
+            downhandler()
+            
         while not q.empty():
             item = q.get()
             if item[:1] in ['/', '.']:
@@ -410,12 +587,11 @@ def curseswrapper(stdscr):
             elif item[:1].lower() == 'm':
                 menuhandler()
             q.task_done()
-
+        
 
 # Set path if passed
-for line in sys.stdin:
-    sys.stderr.write("DEBUG: got line: " + line)
-    setpath(line)
+if len(sys.argv) > 1:
+    setpath(sys.argv[1])
 
 # Setup Socket Server
 try:
@@ -423,26 +599,11 @@ try:
 except OSError:
     if exists(socket_path):
         raise
+        
 server = ThreadedSocketServer(socket_path, ThreadedSocketRequestHandler)
 server_thread = Thread(target=server.serve_forever)
 server_thread.daemon = True
 server_thread.start()
 
-# GPIO setup
-GPIO.setwarnings(False)
-GPIO.cleanup()
-GPIO.setmode(GPIO.BCM)
-# Prev Button
-GPIO.setup(gpiopin_prev, GPIO.IN)
-GPIO.add_event_detect(gpiopin_prev, GPIO.FALLING, callback=prevhandler, bouncetime=100)
-# Next Button
-GPIO.setup(gpiopin_next, GPIO.IN)
-GPIO.add_event_detect(gpiopin_next, GPIO.FALLING, callback=nexthandler, bouncetime=100)
-# Menu Button
-GPIO.setup(gpiopin_menu, GPIO.IN)
-GPIO.add_event_detect(gpiopin_menu, GPIO.FALLING, callback=menuhandler, bouncetime=100)
-
 # Start the interface
 curses.wrapper(curseswrapper)
-
-

@@ -1,4 +1,4 @@
 #!/bin/sh
 
-echo -n '.' | nc -w1 -U /tmp/lyricsbrowser.sock
+echo -n '.' | socat - UNIX-CONNECT:/tmp/lyricsbrowser.sock
 logger "Dismount"

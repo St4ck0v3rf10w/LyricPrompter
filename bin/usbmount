@@ -5,7 +5,7 @@
 lyricdir="$2/lyrics"
 if [ -d $lyricdir ]; then
 	logger "Device $1 got mounted here $2"
-        echo -n $lyricdir | nc -w1 -U /tmp/lyricsbrowser.sock
+        echo -n $lyricdir | socat - UNIX-CONNECT:/tmp/lyricsbrowser.sock
 else
 	logger "No device with lyric directory"
 fi
