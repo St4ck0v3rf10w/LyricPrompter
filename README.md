@@ -1,4 +1,56 @@
-# On Stage Lyrics Browser
+# Lyric Prompter for on Stage 
+
+Changes to Origial Project:
+ 1. Used on a TinyCore Linux / PiCore to run only from RAM (SD Card Read only) and to have fast boot time
+ 2. Added Colorization of Lyrics ( with Tags like `<red>`, `<blue>`, ...)
+ 3. center aligned text output
+ 4. use 4 Buttons Menue ( From my opinion original 3 Key control is better but previous Project is already in use and has 4 Keys Keyboard)
+ 5. Use Arrow Keys instead of GPIOs ( External USB Footswitch Keyboard emulates the four arrow Keys Up, Down, Left, Right with an Arduino )
+ 
+
+ Following Steps to use in PiCore:
+ 
+ Please follow instructions of PiCore installation.
+ http://tinycorelinux.net/5.x/armv6/releases/README?ref=itsfoss.com
+
+
+important: 
+  resize2fs /dev/mmcblk0p2  -> otherwise not enough space will be available
+  default Password: piCore
+  do not forget to run filetool.sh -b to make the changes persistent
+
+installed / needed tcz Packages:
+ncurses-terminfo
+python3.11
+socat
+
+update /opt/filelist.lst with rule location (/etc/udev/rules.d/) -> to make mount / unmount rule persistent
+
+#### Setup autorun (Important change!!! Otherwise default terminal input is the pipe and not the terminal -> Arrow Keys / handling will not work)
+Add the following to ~/.profile
+```nano
+setfont /usr/share/consolefonts/Lat15-TerminusBold32x16.psf.gz
+LDIR=$(find /media -maxdepth 2 -type d -name 'lyrics')
+
+if [ -d "$LDIR" ]; then
+    python3 ~/on-stage-lyrics-browser/bin/lyricsbrowser.py "$LDIR"
+else
+    python3 ~/on-stage-lyrics-browser/bin/lyricsbrowser.py
+fi
+```
+
+
+
+This is just a first quick and dirty modification and extension for my personal use. Feel free to contact me if something is quite too dirty and should be fixed. 
+Project is under construction and not fully ready to use.
+
+ToDo: 
+code optimization 
+intensive and stage tests
+maybe copy files to ram buffer to allow removal of USB stick / interruption of USB Stick
+
+
+# -----------------------------(Original Text)----------------------------
 The On Stage Lyrics Browser is a footswitch-controlled teleprompter 
  system for live performance. Its based on the Raspberry Pi and provides
  a simple curses-based interface to list text files from a USB flash 
