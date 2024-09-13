@@ -12,7 +12,8 @@ Changes to Origial Project:
  
  Please follow instructions of PiCore installation.
  http://tinycorelinux.net/5.x/armv6/releases/README?ref=itsfoss.com
-
+Currently testet with PiCore 14.1.0 on an RPi 3B+
+used image: http://tinycorelinux.net/14.x/armv7/releases/RPi/
 
 important: 
   resize2fs /dev/mmcblk0p2  -> otherwise not enough space will be available
@@ -50,7 +51,7 @@ intensive and stage tests
 maybe copy files to ram buffer to allow removal of USB stick / interruption of USB Stick
 
 
-# -----------------------------(Original Text)----------------------------
+# -----------------(Original Text)-------------
 The On Stage Lyrics Browser is a footswitch-controlled teleprompter 
  system for live performance. Its based on the Raspberry Pi and provides
  a simple curses-based interface to list text files from a USB flash 
