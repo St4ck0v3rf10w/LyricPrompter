@@ -1,331 +1,401 @@
-# Lyric Prompter for on Stage 
+# LyricPrompter
 
-Changes to Origial Project:
- 1. Used on a TinyCore Linux / PiCore to run only from RAM (SD Card Read only) and to have fast boot time
- 2. Added Colorization of Lyrics ( with Tags like `<red>`, `<blue>`, ...)
- 3. center aligned text output
- 4. use 4 Buttons Menue ( From my opinion original 3 Key control is better but previous Project is already in use and has 4 Keys Keyboard)
- 5. Use Arrow Keys instead of GPIOs ( External USB Footswitch Keyboard emulates the four arrow Keys Up, Down, Left, Right with an Arduino )
- 
+Ein textbasierter Prompter für Liedtexte auf einem Raspberry Pi mit piCore/TinyCore Linux. Das Programm wird vollständig im Terminal ausgeführt und kann mit einer USB-Fußschalter-Tastatur bedient werden. Die vier Pfeiltasten reichen für die Navigation aus.
 
- Following Steps to use in PiCore:
- 
- Please follow instructions of PiCore installation.
- http://tinycorelinux.net/5.x/armv6/releases/README?ref=itsfoss.com
-Currently testet with PiCore 14.1.0 on an RPi 3B+
-used image: http://tinycorelinux.net/14.x/armv7/releases/RPi/
+Das Projekt durchsucht Verzeichnisse nach Lyrics, zeigt die Liedauswahl an und stellt den Text seitenweise dar. USB-Datenträger können über eine udev-Regel automatisch read-only eingehängt und beim Entfernen wieder ausgehängt werden.
 
-important: 
-  resize2fs /dev/mmcblk0p2  -> otherwise not enough space will be available
-  default Password: piCore
-  do not forget to run filetool.sh -b to make the changes persistent
+## Inhaltsverzeichnis
 
-installed / needed tcz Packages:
-ncurses-terminfo
-python3.11
-socat
+- [Funktionen](#funktionen)
+- [Projektstruktur](#projektstruktur)
+- [Voraussetzungen](#voraussetzungen)
+- [Installation](#installation)
+- [Konfiguration](#konfiguration)
+- [Lyrics vorbereiten](#lyrics-vorbereiten)
+- [Bedienung](#bedienung)
+- [USB-Automount unter piCore](#usb-automount-unter-picore)
+- [Autostart](#autostart)
+- [Tests](#tests)
+- [Fehlersuche](#fehlersuche)
+- [Bekannte Grenzen](#bekannte-grenzen)
 
-update /opt/filelist.lst with rule location (/etc/udev/rules.d/) -> to make mount / unmount rule persistent
+## Funktionen
 
-#### Setup autorun (Important change!!! Otherwise default terminal input is the pipe and not the terminal -> Arrow Keys / handling will not work)
-Add the following to ~/.profile
-```nano
-setfont /usr/share/consolefonts/Lat15-TerminusBold32x16.psf.gz
-LDIR=$(find /media -maxdepth 2 -type d -name 'lyrics')
+- Terminal-Oberfläche auf Basis von Python `curses`
+- Navigation ausschließlich über `Up`, `Down`, `Left` und `Right`
+- Auswahl eines Lyrics-Verzeichnisses über einen integrierten Browser
+- Rückkehr vom Browser zum Prompter über die sichtbare Option „Return to prompter“ beziehungsweise deren Übersetzung
+- Anzeige der Lieddateien in einer mittig dargestellten, umrandeten Auswahl
+- Seitenweise Anzeige langer Liedtexte
+- Zentrierte Darstellung der Textzeilen
+- Farbige Textabschnitte über Tags wie `<red>` und `</red>`
+- Deutsch und Englisch als konfigurierbare Benutzeroberflächen
+- Read-only-USB-Mount über eine udev-Regel
+- Kopieren des gewählten Verzeichnisses in das lokale Lyrics-Zielverzeichnis
+- Funktioniert auch ohne angeschlossenen USB-Datenträger: Der Prompter zeigt dann die Option zum Öffnen des Browsers an
 
-if [ -d "$LDIR" ]; then
-    python3 ~/on-stage-lyrics-browser/bin/lyricsbrowser.py "$LDIR"
-else
-    python3 ~/on-stage-lyrics-browser/bin/lyricsbrowser.py
-fi
+## Projektstruktur
+
+```text
+LyricPrompter/
+├── bin/
+│   ├── browser.py       # Verzeichnisbrowser
+│   ├── config.py        # Pfade und Sprache
+│   ├── main.py          # Haupteinstieg und Zustandswechsel
+│   └── prompter.py      # Liedauswahl und Textanzeige
+├── etc/
+│   └── udev/rules.d/
+│       └── 11-media-by-label-auto-mount.rules
+├── tests/
+│   └── test_app_entrypoints.py
+├── Lyrics/              # lokale Beispieldaten, nicht für Git bestimmt
+├── TestData/            # Test-/USB-Ersatzdaten, nicht für Git bestimmt
+├── .gitignore
+└── README.md
 ```
 
+Die Verzeichnisse `Lyrics/`, `TestData/`, Python-Cache-Dateien und `__pycache__/` werden durch `.gitignore` vom Git-Upload ausgeschlossen.
 
+## Voraussetzungen
 
-This is just a first quick and dirty modification and extension for my personal use. Feel free to contact me if something is quite too dirty and should be fixed. 
-Project is under construction and not fully ready to use.
+### Entwicklung unter Windows, Linux oder macOS
 
-ToDo: 
-code optimization 
-intensive and stage tests
-maybe copy files to ram buffer to allow removal of USB stick / interruption of USB Stick
+- Python 3.11 oder neuer
+- Ein Terminal mit Unterstützung für `curses`
+- Schreibrechte auf das konfigurierte Zielverzeichnis
 
+Unter Windows wird das Standardmodul `curses` nicht von jeder Python-Installation mitgeliefert. Für die eigentliche piCore-Zielumgebung ist Linux mit `ncurses` vorgesehen.
 
-# -----------------(Original Text)-------------
-The On Stage Lyrics Browser is a footswitch-controlled teleprompter 
- system for live performance. Its based on the Raspberry Pi and provides
- a simple curses-based interface to list text files from a USB flash 
- drive directory and display their content.
+### Zielsystem piCore
 
-The collection of scripts here, installed on a Raspberry Pi, 
-will produce a basic, text-based browser for lyrics on a USB device.
+Getestet wurde das Projekt mit:
 
-[Setup](#to-install) is fairly straightforward, and
- [preparing the files/USB flashdrive](#to-use) are simple. Interfacing
- [pedals](#hardware) with the Raspberry PI takes a little bit
- of work to operate properly, but is not an overly complex task.
- 
-The following screenshots show the two views available: Set List and
-Lyrics View:
+- piCore 14.1.0
+- Raspberry Pi 3B+
+- Python 3.11
+- `ncurses-terminfo`
+- `socat` wird vom aktuellen Programm nicht benötigt, kann aber bei älteren Versionen oder eigenen Integrationen vorhanden sein
 
-<p align="center">
-  <img src="./img/set-list.png" alt="Set List Example"
-       width="540" height="694">
-</p>
+Die Python-Version und Paketnamen können je nach piCore-Version abweichen.
 
-<p align="center">
-  <img src="./img/single-page-lyrics.png" alt="Lyric View Example"
-       width="540" height="694">
-</p>
+## Installation
 
- 
-## Software Included:
- * a udev rule to auto mount/umount USB upon insertion/removal
- * a script that controls the interface display functions
- * a script that sends mount information to the interface
- * a script that sends umount information to the interface
- 
-You will also find schematics in the img directory to assist with
- building debounce circuits, or to illustrate how to connect 
- footswitches without hardware debouncing.
+### Repository holen
 
-## To install:
-This assumes a recent copy of Raspian is installed and everything is
-default.
-
-#### Configure networking
-Connect your PI to a network and be sure you can access APT repositories.
-This does not need to persist beyond initial setup.
-
-#### Install dependencies
 ```sh
-$ sudo apt install -y python3-rpi.gpio git
+git clone <REPOSITORY-URL> ~/LyricPrompter
+cd ~/LyricPrompter
 ```
 
-#### Install scripts
+Falls das Repository bereits vorhanden ist:
+
 ```sh
-$ cd ~
-$ git clone https://github.com/joshuabettigole/on-stage-lyrics-browser.git
-$ chmod +x on-stage-lyrics-browser/bin/*
+cd ~/LyricPrompter
+git pull
 ```
 
-#### Rotate screen
-This works best with the screen orientation rotated 90° or 270°
+### Programm testen
+
+Das Programm wird vom Projektverzeichnis aus gestartet:
+
 ```sh
-$ sudo nano /boot/config.txt
-```
-Add one of the following:
-```nano
-display_rotate=1
-display_rotate=3
+python3 bin/main.py
 ```
 
-#### Symlink udev rules
-```sh
-$ sudo ln -s ~/on-stage-lyrics-browser/etc/udev/rules.d/* /etc/udev/rules.d/
-```
+Alternativ kann der aktuelle Arbeitsordner direkt als Testwurzel verwendet werden, wenn die Pfade in `bin/config.py` entsprechend gesetzt sind.
 
-#### Setup autorun
-Add the following to ~/.profile
-```nano
-setfont /usr/share/consolefonts/Lat15-TerminusBold32x16.psf.gz
-LDIR=$(find /media -maxdepth 2 -type d -name 'lyrics' -print0 -quit 2> /dev/null)
+Beim Start öffnet sich zunächst der Browser. Dort wird ein Verzeichnis mit Lieddateien ausgewählt. Nach der Auswahl werden dessen Dateien nach `LYRIC_DESTINATION_PATH` kopiert und im Prompter geöffnet.
 
-if [ -d $LDIR ]; then
-        echo -n $LDIR | ~/on-stage-lyrics-browser/bin/lyricsbrowser.py
-else
-        ~/on-stage-lyrics-browser/bin/lyricsbrowser.py
-fi
-```
-This sets the font size to something reasonably large - feel free to modify.
-It also looks to see if a USB was present and mounted during boot, checks
-for a lyrics directory, and passes that directory along to start the 
-interface script upon login.
+## Konfiguration
 
-#### Setup autologin, disable network on boot
-```sh
-$ sudo raspi-config\
-```
+Alle wichtigen Einstellungen befinden sich in [bin/config.py](bin/config.py).
 
-To boot directly to the lyrics browser, enable autologin
-> Boot Options -> Desktop/CLI -> Console Autologin
+### Pfade
 
-To save time on bootup, disable networking
-> Boot Options -> Wait for Network at Boot -> No
-
-#### Restart
-Reboot your Pi and if all worked, you should see the lyrics browser
-after a few moments.
-
-## To use:
-#### USB Formatting
-* The USB flash drive you use should be FAT formatted, with or without
-partitioning.
-* On the flash drive, you should have a <strong>lyrics</strong>
-directory (all lowercase)
-* Within the <strong>lyrics</strong> directory, the lyrics files need to
-be placed in alphabetical order. The easiest way to do this is to number
-them.
-```sh
-pi@raspberry:/media/usbhd-sda $ ls -l lyrics
-total 64
--rwxrwxr-x 1 root users  1679 Oct  3  2018 01 - The Song That Never Ends.txt
--rwxrwxr-x 1 root users   869 Oct 11  2018 02 - Mary Had A Little Lamb.txt
--rwxrwxr-x 1 root users 11886 Oct 11  2018 03 - 99 Bottles of Beer.txt
--rwxrwxr-x 1 root users   735 Oct 11  2018 04 - Never Gonna Give You Up.txt
--rwxrwxr-x 1 root users   414 Oct 11  2018 05 - Spongebob Theme Song.txt
-```
-
-#### File Formatting
-Files must be in .txt format (.rtf and .doc do not work). At
-some point in the future, support for adding colors will be considered.
-
-If lyric lines are too long to fit within the width of the page, line
-breaks will be added and additional lines will be prefixed with " - ".
-
-If lyrics for one song are too long to fit on one page, subsequent pages
-will be added, as necessary, for browsing. The lower right corner of the
-screen will display <strong>"Next Page ->"</strong> and the upper right 
-corner displays the current page number: <strong>"Page #/##"</strong>
-<p align="center">
-  <img src="./img/multi-page-lyrics.png" alt="Multi-Page Example"
-       width="540" height="694">
-</p>
-
-#### Starting
-Upon bootup, if a USB device is present, it should be mounted and the
-lyrics directory path (if it exists) passed to the browser script. 
-
-If no USB device is present at boot, the browser should alert you to 
-<strong>Insert USB Media</strong>. When a USB device is inserted, the 
-browser will be notified and will automatically display the set list.
-
-A USB device can be removed and reconnected at any point. The browser 
-will be notified and act accordingly. Since the USB filesystem is 
-mounted Read-Only, there should be no ill-effect from removal without
-proper unmounting.
-
-#### Browsing
-The browser depends on GPIO interrupts for navigation. There is no 
-facility for keyboard browsing. Three buttons/pedals are necessary to
-use the full features of the program, <strong>Previous</strong>, 
-<strong>Menu/Select</strong>, and <strong>Next</strong>. The 
-<strong>Previous</strong> button/pedal can be omitted at the cost of 
-ease of navigation. See the [Hardware](#hardware) section for
-details.
-
-When using the browser, the bar across the bottom of the screen
-displays what each of the three buttons would do in any given context.
-When lyrics are displayed for a specific song, the top bar displays the
-song title and page information.
-
-#### Localization
-Interface language is in English (sorry, that's all I know). If you 
-care to modify the language for your locale, modify the strings in the 
-_e dictionary within the bin/lyricsbrowser.py file:
 ```python
-# Setup language strings
-_e = {
-    'welcome': "Welcome",
-    'load_media': "Insert USB Media",
-    'select': "Select",
-    'menu': "Menu",
-    'next': "Next",
-    'prev': "Prev",
-    'first': "First",
-    'last': "Last",
-    'prev_page': "Prev Page",
-    'prev_song': "Prev Song",
-    'next_page': "Next Page",
-    'next_song': "Next Song",
-    'page': "Page"
-}
+USB_MOUNT_PATH = "/media/MeinUSBStick"
+LYRIC_DESTINATION_PATH = "/home/tc/LyricPrompter/Lyrics"
+ROOT_PATH = USB_MOUNT_PATH
 ```
 
-#### Advanced
+`ROOT_PATH` ist die Wurzel des Browsers. Normalerweise zeigt sie auf das Verzeichnis, unter dem der USB-Stick eingehängt wird.
 
-The browser runs a socket server that listens for the lyrics directory
-path to be passed in. It's possible to script Next, Previous, and 
-Menu/Select with 3rd-party software or custom scripts of your choosing.
-By sending 'n', 'p', or 'm' to /tmp/lyricsbrowser.sock, the browser
-responds accordingly.
+`LYRIC_DESTINATION_PATH` ist das lokale Ziel, in das der Inhalt des ausgewählten Ordners kopiert wird. Der Prompter liest die Lieddateien anschließend aus diesem Verzeichnis.
 
-NEXT command
-```sh
-echo -n 'n' | nc -w1 -U /tmp/lyricsbrowser.sock 
-```
-PREVIOUS command
-```sh
-echo -n 'p' | nc -w1 -U /tmp/lyricsbrowser.sock 
-```
-MENU/SELECT command
-```sh
-echo -n 'm' | nc -w1 -U /tmp/lyricsbrowser.sock 
-```
+Die momentan im Repository eingetragenen Windows-Pfade sind für die lokale Entwicklung gedacht. Für piCore müssen sie durch Linux-Pfade ersetzt werden.
 
+### Sprache
 
-## Hardware
-#### Requirements:
-A properly configured Raspberry Pi attached to a widescreen monitor is
-a start. A keyboard and network connection is required to get past the
-installation process, but then should not be required at all.
+Die Sprache wird über `LANGUAGE` eingestellt:
 
-A three button/pedal box of your own choosing. Buttons/pedals should be 
-normally open (normally closed untested).
-
-While some attempts are made in code to handle switch debouncing, there
-is still risk that one button cycle can advance multiple pages. It is 
-<strong>HIGHLY</strong> recommend that a simple debounce circuit be 
-added between the PI and the pedals/buttons. The following schematic
-outlines a fairly effective debounce circuit:
-
-<p align="center">
-  <img src="./img/debounce_schematic.png" alt="Debounce Schematic"
-       width="600" height="341">
-</p>
-
-[See Schematic](./img/debounce_schematic.png)
-
-Without a hardware debounce circuit, the pedals/buttons should be
-connected from ground (pin 39) to:
-
-* Previous: GPIO 13
-* Menu: GPIO 19
-* Next: GPIO 26
-
-(these are pins 33,35,37)
-
-<p align="center">
-  <img src="./img/no-debounce_bb.png" alt="Direct Connection"
-       width="600" height="645">
-</p>
-
-The exact GPIO pins can be altered in the bin/lyricsbrowser.py file
 ```python
-gpiopin_prev = 13
-gpiopin_next = 26
-gpiopin_menu = 19
+LANGUAGE = "german"
 ```
 
-## TODO:
-* Work on a way to format text with color/bold. There is still no plan
-to use anything but .txt files, however.
-* Build a shell script to simplify install.
-* Preconfigured Raspberry PI OS image
-* Provide a hardware list
-* Offer pre-built debounce interface
+Mögliche Werte:
 
-## License:
-The On Stage Lyrics Browser is licensed under the terms of the GNU Affero
-General Public License v3.0 and is available for free. See the
-[License](./LICENSE) for details.
+```python
+LANGUAGE = "german"
+LANGUAGE = "english"
+```
 
-## Credits:
-udev rules adapted from:\
-https://www.axllent.org/docs/view/auto-mounting-usb-storage/
+Die sichtbaren Texte liegen in den Dictionaries `german` und `english`. Wenn eine weitere Sprache benötigt wird, kann dort ein weiteres Dictionary ergänzt und anschließend in `languages` registriert werden.
 
-switch debounce circuit from:\
-https://www.logiswitch.net/switch-debounce-diy_tutorial/method-4-hardware-debounce-for-spst-switches
+## Lyrics vorbereiten
 
-rotating the raspberry pi screen from:\
-https://www.raspberrypi-spy.co.uk/2017/11/how-to-rotate-the-raspberry-pi-display-output/
+### Verzeichnisaufbau
+
+Der Browser zeigt Verzeichnisse an. Ein ausgewähltes Verzeichnis sollte direkt die Lieddateien enthalten, zum Beispiel:
+
+```text
+USB-Stick/
+├── Konzert/
+│   ├── 01_Erster Song.txt
+│   ├── 02_Zweiter Song.txt
+│   └── 03_Dritter Song.txt
+└── Probe/
+    └── 01_Test.txt
+```
+
+Ein Ordner ohne weitere Unterordner wird als Lyrics-Ordner behandelt. Bei der ersten Auswahl eines solchen Ordners wird die Auswahl markiert. Mit `Right` wird sie bestätigt.
+
+### Dateiformat
+
+- Unterstützt werden normale Textdateien mit der Endung `.txt` oder `.TXT`.
+- Die Dateien werden alphabetisch sortiert.
+- Nummerierte Dateinamen sorgen für eine gewünschte Reihenfolge, zum Beispiel `01_...`, `02_...` und `03_...`.
+- Versteckte Dateien werden ignoriert.
+- Die Dateien sollten UTF-8 verwenden.
+
+### Farb-Tags
+
+Der Prompter kann bestimmte Farb-Tags im Text interpretieren. Beispiel:
+
+```text
+<red>Strophe in Rot</red>
+<green>Strophe in Grün</green>
+<yellow>Hinweis in Gelb</yellow>
+```
+
+Verfügbare Farbnamen entsprechen den Farbschlüsseln in `init_colors()` in [bin/prompter.py](bin/prompter.py), unter anderem:
+
+```text
+red, green, yellow, blue, magenta, cyan, white
+```
+
+Die Tags werden nicht als sichtbarer Text ausgegeben. Nicht geschlossene oder unbekannte Tags sollten vermieden werden.
+
+## Bedienung
+
+Die Bedienung ist für eine Tastatur oder einen Fußschalter ausgelegt, der die vier Pfeiltasten erzeugt.
+
+### Browser
+
+| Taste | Funktion |
+|---|---|
+| `Up` | Vorherigen Eintrag auswählen; vom ersten Eintrag zur Option „Return to prompter“ wechseln |
+| `Down` | Nächsten Eintrag auswählen; von der oberen Option zurück zur Liste wechseln |
+| `Right` | Verzeichnis öffnen, über `..` zum übergeordneten Verzeichnis wechseln oder eine Auswahl bestätigen |
+| `Left` | Zum übergeordneten Verzeichnis wechseln |
+| `q` | Anwendung beenden |
+
+Ein Blattverzeichnis wird bei der ersten Bestätigung markiert. Die zweite Bestätigung mit `Right` übernimmt es als Lyrics-Verzeichnis.
+
+Die Aktion oberhalb des Browser-Rahmens führt zurück zum Prompter. Das ist besonders hilfreich, wenn bereits ein Lyrics-Zielverzeichnis geladen ist.
+
+### Prompter
+
+| Taste | Funktion |
+|---|---|
+| `Up` | Vorheriges Lied oder vorherige Seite; aus der ersten Auswahl zur Browser-Option wechseln |
+| `Down` | Nächstes Lied oder nächste Seite |
+| `Right` | Lied öffnen, nächste Seite anzeigen oder die Browser-Option öffnen |
+| `Left` | Vorheriges Lied beziehungsweise vorherige Seite |
+| `q` oder `Esc` | Anwendung beenden |
+
+Wenn keine Lyrics vorhanden sind, wird `USB-Stick einlegen` mittig angezeigt. Die Option `Zum Browser` beziehungsweise `Go to browser` steht darüber und kann mit `Up` und `Right` ausgewählt werden.
+
+## USB-Automount unter piCore
+
+Die Datei [etc/udev/rules.d/11-media-by-label-auto-mount.rules](etc/udev/rules.d/11-media-by-label-auto-mount.rules) übernimmt das automatische Mounten und Unmounten.
+
+Die Regel:
+
+1. erkennt USB-Datenträger beziehungsweise deren Partitionen,
+2. liest das Dateisystem-Label mit `blkid`,
+3. erstellt ein Verzeichnis unter `/media/`,
+4. mountet das Gerät read-only,
+5. hängt es beim Entfernen wieder aus und entfernt das leere Mount-Verzeichnis.
+
+Es werden keine zusätzlichen `usbmount`- oder `usbumount`-Skripte benötigt. Das Mounten erfolgt direkt über `/bin/mount`, das Aushängen über `/bin/umount`.
+
+### Regel installieren
+
+```sh
+sudo mkdir -p /etc/udev/rules.d
+sudo cp ~/LyricPrompter/etc/udev/rules.d/11-media-by-label-auto-mount.rules \
+    /etc/udev/rules.d/11-media-by-label-auto-mount.rules
+```
+
+Danach Regeln neu laden:
+
+```sh
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Bei piCore müssen Änderungen außerdem persistent gespeichert werden. Je nach Installation gehören die Regel und die Projektdateien in die Persistenzkonfiguration, zum Beispiel `/opt/filelist.lst`, und anschließend muss gespeichert werden:
+
+```sh
+filetool.sh -b
+```
+
+### Mount-Optionen
+
+Die Regel verwendet grundsätzlich:
+
+```text
+relatime,ro
+```
+
+Für FAT- und NTFS-Dateisysteme werden zusätzlich unter anderem UTF-8 und die Gruppen-/Maskenoptionen gesetzt. Der USB-Stick wird damit read-only eingebunden. Das schützt die Daten auf dem Stick, ersetzt aber kein Backup.
+
+### Wichtiger Hinweis zur udev-Regel
+
+udev-Regeln laufen mit einer eingeschränkten Umgebung. Verwende deshalb absolute Pfade wie `/bin/mount`, `/bin/umount` und `/bin/mkdir`. Prüfe auf deinem piCore-System mit `which mount`, `which umount` und `which mkdir`, ob die Pfade stimmen.
+
+Nach Änderungen sollte die Regel mit einem echten USB-Gerät getestet werden. Bereits eingehängte Geräte werden durch das bloße Neuladen der Regeln nicht immer automatisch neu verarbeitet.
+
+## Autostart
+
+Damit der Prompter nach dem Booten automatisch startet, kann er aus `~/.profile` aufgerufen werden. Ein einfaches Beispiel:
+
+```sh
+cd ~/LyricPrompter
+python3 bin/main.py
+```
+
+Für einen größeren Terminaltext kann vor dem Programmstart eine passende Konsole-Schrift gesetzt werden. Der genaue Pfad hängt von der installierten piCore-Schrift ab, zum Beispiel:
+
+```sh
+setfont /usr/share/consolefonts/Lat15-TerminusBold32x16.psf.gz
+cd ~/LyricPrompter
+python3 bin/main.py
+```
+
+Wenn eine grafische Desktop-Umgebung nicht benötigt wird, sollte piCore auf Konsolen-Autologin eingerichtet werden. Die genaue Konfiguration hängt vom verwendeten piCore-Image ab.
+
+### Terminal-Eingabe sicherstellen
+
+Das Programm benötigt die echte Terminal-Eingabe, damit die Pfeiltasten zuverlässig ankommen. Starte es deshalb aus einer interaktiven Login-Shell und nicht aus einer Pipe oder einem Prozess, der die Standardeingabe umleitet.
+
+## Tests
+
+Die Tests benötigen `pytest`:
+
+```sh
+python3 -m pip install pytest
+python3 -m pytest -q
+```
+
+Die vorhandenen Tests prüfen aktuell die Einstiegspunkte von Browser und Prompter. Sie laufen ohne curses-Oberfläche und sind daher auch für die Entwicklung auf einem Desktop-System geeignet.
+
+Für einen manuellen Funktionstest:
+
+1. Lege mindestens ein Verzeichnis mit `.txt`-Dateien in der konfigurierten Browser-Wurzel an.
+2. Starte `python3 bin/main.py`.
+3. Öffne das Verzeichnis mit `Right`.
+4. Bestätige einen Lyrics-Ordner zweimal mit `Right`.
+5. Navigiere im Prompter durch Auswahl, Lied und Seiten.
+6. Prüfe mit `Up` die Option zum Browser und öffne sie mit `Right`.
+7. Teste den Fall ohne USB-Stick beziehungsweise ohne Lyrics.
+
+## Fehlersuche
+
+### Der Browser zeigt keine Verzeichnisse
+
+Prüfe:
+
+```sh
+ls -la /media
+ls -la /media/<USB-LABEL>
+```
+
+Kontrolliere anschließend `ROOT_PATH` in `bin/config.py`. Der Pfad muss exakt auf den tatsächlichen Mount-Punkt zeigen.
+
+### Der USB-Stick wird nicht automatisch eingehängt
+
+Prüfe die udev-Regel:
+
+```sh
+udevadm control --reload-rules
+udevadm monitor --udev --property
+```
+
+Stecke den USB-Stick danach neu ein und kontrolliere mit:
+
+```sh
+mount
+ls -la /media
+```
+
+Prüfe außerdem, ob das Dateisystem erkannt wird:
+
+```sh
+blkid
+```
+
+### Der Prompter zeigt „USB-Stick einlegen“
+
+Das bedeutet, dass `LYRIC_DESTINATION_PATH` nicht existiert oder keine passenden Textdateien enthält. Prüfe:
+
+```sh
+ls -la /home/tc/LyricPrompter/Lyrics
+```
+
+Der Pfad muss mit `LYRIC_DESTINATION_PATH` übereinstimmen.
+
+### Die Pfeiltasten reagieren nicht
+
+- Starte das Programm in einer echten interaktiven Konsole.
+- Prüfe, ob der Fußschalter tatsächlich normale Pfeiltasten sendet.
+- Teste die Eingabe vorübergehend mit `showkey` oder einem einfachen Terminalprogramm.
+- Stelle sicher, dass kein Autostart-Skript die Standardeingabe umleitet.
+
+### Ein Lyrics-Ordner lässt sich nicht auswählen
+
+Ein Ordner wird erst nach der ersten Bestätigung markiert. Drücke `Right` ein zweites Mal, sobald `Select` beziehungsweise `Auswählen` angezeigt wird.
+
+### Das Mount-Verzeichnis bleibt bestehen
+
+Das Verzeichnis wird nur entfernt, wenn es nach dem Aushängen leer ist. Prüfe, ob das Gerät wirklich ausgehängt wurde:
+
+```sh
+mount | grep /media
+```
+
+Falls noch ein Prozess auf den Mount-Punkt zugreift, kann `rmdir` fehlschlagen.
+
+## Bekannte Grenzen
+
+- Die Oberfläche ist für Terminalgrößen mit ausreichend Höhe und Breite ausgelegt.
+- Es gibt aktuell keine automatische Synchronisation zurück auf den USB-Stick. Die Auswahl wird in das lokale Zielverzeichnis kopiert.
+- Das Zielverzeichnis wird aktuell nicht automatisch vollständig geleert, bevor neue Dateien kopiert werden. Alte Dateien können daher erhalten bleiben.
+- Konflikte beim Kopieren bereits vorhandener Dateien oder Verzeichnisse müssen auf dem Zielsystem beachtet werden.
+- Nur Textdateien werden unterstützt; PDF, Word, RTF und Bilddateien werden nicht verarbeitet.
+- Die udev-Regel ist auf Linux/piCore ausgelegt und funktioniert nicht unter Windows.
+- Eine sichere Entfernung des USB-Sticks sollte erst erfolgen, wenn keine Lesezugriffe mehr stattfinden.
+
+## Sicherheit und Datensicherung
+
+Der USB-Mount erfolgt read-only, damit der Prompter keine Dateien auf dem Stick verändert. Trotzdem sollte der Stick nicht als einzige Kopie der Liedtexte verwendet werden. Halte immer eine separate Sicherung der Lyrics bereit.
+
+Die Pfade in `bin/config.py` können absolute lokale Pfade enthalten. Prüfe vor dem Commit, ob dort keine privaten Verzeichnisnamen oder Zugangsdaten stehen.
+
+## Lizenz
+
+Siehe [LICENSE](LICENSE).
+
+## Projektstatus
+
+Das Projekt ist auf den persönlichen Einsatz als einfacher Bühnen-Prompter ausgerichtet. Vor einem Live-Einsatz sollten insbesondere USB-Wechsel, Stromausfall, Terminalgröße, Fußschalter-Eingaben und die komplette Bootsequenz auf der konkreten piCore-Hardware getestet werden.

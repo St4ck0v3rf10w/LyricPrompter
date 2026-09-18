@@ -79,10 +79,16 @@ def browser(stdscr):
 
     armed_leaf = False
     armed_path = None
+    first_frame = True
 
     while True:
 
         stdscr.clear()
+        force_full_refresh = first_frame
+        if first_frame:
+            stdscr.touchwin()
+            stdscr.clearok(True)
+            first_frame = False
 
         entries = get_directories(path)
 
@@ -161,10 +167,12 @@ def browser(stdscr):
             except curses.error:
                 pass
 
-        stdscr.refresh()
-
         try:
-            panel.refresh()
+            stdscr.noutrefresh()
+            panel.noutrefresh()
+            curses.doupdate()
+            if force_full_refresh:
+                stdscr.clearok(False)
         except curses.error:
             pass
 

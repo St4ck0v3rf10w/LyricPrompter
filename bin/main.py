@@ -45,19 +45,15 @@ class App:
 
         os.makedirs(config.LYRIC_DESTINATION_PATH, exist_ok=True)
 
-        # for entry in os.listdir(config.LYRIC_DESTINATION_PATH):
-        #     full = os.path.join(config.LYRIC_DESTINATION_PATH, entry)
-        #     if os.path.isdir(full):
-        #         shutil.rmtree(full)
-        #     else:
-        #         os.remove(full)
+        for entry in os.listdir(config.LYRIC_DESTINATION_PATH):
+            full = os.path.join(config.LYRIC_DESTINATION_PATH, entry)
+            if os.path.isfile(full) and entry.lower().endswith(".txt"):
+                os.remove(full)
 
         for entry in os.listdir(self.selected_folder):
             src = os.path.join(self.selected_folder, entry)
             dst = os.path.join(config.LYRIC_DESTINATION_PATH, entry)
-            if os.path.isdir(src):
-                shutil.copytree(src, dst)
-            else:
+            if os.path.isfile(src) and entry.lower().endswith(".txt"):
                 shutil.copy2(src, dst)
 
     def state_prompter(self, stdscr):

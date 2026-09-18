@@ -1,12 +1,19 @@
-USB_MOUNT_PATH = "C:\\Users\\Ludwig\\Documents\\GitHub\\LyricPrompter\\TestData"
-LYRIC_DESTINATION_PATH = "C:\\Users\\Ludwig\\Documents\\GitHub\\LyricPrompter\\Lyrics"
+import os
+
+
+if os.name == "nt":
+    USB_MOUNT_PATH = "C:\\Path\\to\\USB\\Mount"
+    LYRIC_DESTINATION_PATH = "C:\\Path\\to\\LyricPrompter\\Lyrics"
+else:
+    USB_MOUNT_PATH = "/media"
+    LYRIC_DESTINATION_PATH = "/home/tc/LyricPrompter/Lyrics"
 
 
 # Single source of truth for the fixed filesystem layout.
 ROOT_PATH = USB_MOUNT_PATH
 
 # Set this to "english" or "german" to change the user interface language.
-LANGUAGE = "german"
+LANGUAGE = "english"
 
 english = {
     'welcome': "Welcome",
