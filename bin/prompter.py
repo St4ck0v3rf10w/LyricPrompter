@@ -2,60 +2,34 @@
 
 import re
 import curses
-import socketserver
 import sys
 import locale
 from pathlib import Path
-from threading import Thread, current_thread
-from queue import Queue
+from config import _lang
 
 # System-Locale für UTF-8 aktivieren
 locale.setlocale(locale.LC_ALL, '')
 
-# Setup language strings
-_e = {
-    'welcome': "Welcome",
-    'load_media': "Insert USB Media",
-    'select': "Select Song",
-    'setlist': "Setlist",
-    'menu': "Menu",
-    'prev_song': "Prev Song",
-    'next_song': "Next Song",
-    'next_page': "Next Page",
-    'prev_page': "Prev Page",
-    'page': "Page",
-    'empty': "Empty File - No Text Found"
-}
-
-socket_path = Path("/tmp/lyricsbrowser.sock")
 lyrics_path = Path(".")
 
+
+def run(stdscr, lyric_dir):
+    setpath(lyric_dir)
+    return curseswrapper(stdscr)
+
 filelist = []
-q = Queue()
 screenlines = 0
 screencols = 0
 topbar = None
 displaywin = None
 bottombar = None
+screenwin = None
 selectedsong = 0
 menuopen = False
 curfilelyrics = []
 selectedpage = 0
 colors = {}
 tag_pattern = None
-
-
-class ThreadedSocketRequestHandler(socketserver.BaseRequestHandler):
-    def handle(self):
-        data = str(self.request.recv(1024), 'ascii').strip()
-        cur_thread = current_thread()
-        response = bytes(f"{cur_thread.name}: {data}", 'ascii')
-        self.request.sendall(response)
-        q.put(data)
-
-
-class ThreadedSocketServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-    pass
 
 
 def init_colors():
@@ -197,10 +171,10 @@ def updatetitlebar(clear=False, title_override=None):
     elif filelist:
         lastpage = str(calclastpage() + 1)
         thispage = str(selectedpage + 1)
-        tbarbreak = screencols - len(_e['page']) - 3 - (len(lastpage) * 2)
+        tbarbreak = screencols - len(_lang['page']) - 3 - (len(lastpage) * 2)
         try:
             topbar.addstr(0, 1, songtitle(filelist[selectedsong], max(1, tbarbreak - 2)))
-            topbar.addstr(0, max(0, tbarbreak - 1), f"{_e['page']}: {thispage.rjust(len(lastpage))}/{lastpage}")
+            topbar.addstr(0, max(0, tbarbreak - 1), f"{_lang['page']}: {thispage.rjust(len(lastpage))}/{lastpage}")
         except curses.error:
             pass
     topbar.refresh()
@@ -290,7 +264,10 @@ def menuhandler(*args):
 def uphandler(*args):
     global selectedsong, selectedpage
     if menuopen:
-        selectedsong = selectedsong - 1 if selectedsong > 0 else len(filelist) - 1
+        if not filelist:
+            selectedsong = -1
+            return
+        selectedsong = selectedsong - 1 if selectedsong > 0 else -1
         displaysetlist()
     else:
         if selectedpage > 0:
@@ -301,7 +278,10 @@ def uphandler(*args):
 def downhandler(*args):
     global selectedsong, selectedpage
     if menuopen:
-        selectedsong = (selectedsong + 1) % len(filelist)
+        if not filelist:
+            selectedsong = -1
+            return
+        selectedsong = 0 if selectedsong == -1 else (selectedsong + 1) % len(filelist)
         displaysetlist()
     else:
         if not islastpage():
@@ -338,15 +318,51 @@ def loadsong():
 
     displaylines = preprocess_text(all_lines, screencols - 4, tag_pattern)
     if not displaylines:
-        displaylines.append(_e['empty'])
+        displaylines.append(_lang['empty'])
 
     displaypagesize = max(1, displaywin.getmaxyx()[0])
     curfilelyrics = [displaylines[i:i + displaypagesize] for i in range(0, len(displaylines), displaypagesize)]
 
 
 def displayloadmedia():
+    global menuopen, selectedsong
+
+    menuopen = True
+    selectedsong = -1
+    screenwin.erase()
+    screenwin.hline(1, 0, curses.ACS_HLINE, screencols)
+    screenwin.hline(screenlines - 2, 0, curses.ACS_HLINE, screencols)
+    screenwin.refresh()
     updatetitlebar(clear=True)
-    updatemainwindow(content=[_e['load_media']])
+    displaywin.clear()
+
+    message = _lang['load_media']
+    action = _lang['go_to_browser']
+    display_height, display_width = displaywin.getmaxyx()
+    action_row = max(0, (display_height - 2) // 2)
+    message_row = min(display_height - 1, action_row + 1)
+    action_x = max(0, (display_width - len(action)) // 2)
+    message_x = max(0, (display_width - len(message)) // 2)
+
+    try:
+        displaywin.addnstr(
+            action_row,
+            action_x,
+            action,
+            display_width - action_x - 1,
+            curses.A_REVERSE,
+        )
+        displaywin.addnstr(
+            message_row,
+            message_x,
+            message,
+            display_width - message_x - 1,
+        )
+    except curses.error:
+        pass
+
+    displaywin.refresh()
+    updatebottombar(left='', middle='', right=_lang['select'])
 
 
 def displaysetlist(clearscreen=False):
@@ -354,10 +370,10 @@ def displaysetlist(clearscreen=False):
     menuopen = True
 
     if clearscreen:
-        updatetitlebar(title_override=_e['setlist'])
+        updatetitlebar(title_override=_lang['setlist'])
         updatemainwindow()
 
-    updatebottombar(left='', middle='', right=_e['select'])
+    updatebottombar(left='', middle='', right=_lang['select'])
 
     maxstrlen = max((len(songtitle(f)) for f in filelist), default=0)
     maxstrlen = min(maxstrlen, screencols - 6)
@@ -382,6 +398,10 @@ def displaysetlist(clearscreen=False):
     topx = max(0, int((screencols - pad_width) / 2))
 
     try:
+        browser_label = _lang['go_to_browser']
+        browser_attr = curses.A_REVERSE if selectedsong == -1 else curses.A_NORMAL
+        browser_x = max(0, int((screencols - len(browser_label)) / 2))
+        screenwin.addnstr(max(0, topy - 1), browser_x, browser_label, screencols - browser_x - 1, browser_attr)
         pad.refresh(0, 0, topy, topx, topy + pad_height, topx + pad_width)
     except curses.error:
         pass
@@ -393,9 +413,9 @@ def displaysong():
 
     updatetitlebar()
 
-    right_label = _e['menu'] if islastsong() else _e['next_song']
-    middle_label = _e['next_page'] if not islastpage() else ''
-    left_label = _e['prev_song']
+    right_label = _lang['menu'] if islastsong() else _lang['next_song']
+    middle_label = _lang['next_page'] if not islastpage() else ''
+    left_label = _lang['prev_song']
 
     updatebottombar(left=left_label, middle=middle_label, right=right_label)
 
@@ -404,10 +424,11 @@ def displaysong():
 
 
 def curseswrapper(stdscr):
-    global screenlines, screencols, topbar, displaywin, bottombar, colors, tag_pattern
+    global screenlines, screencols, topbar, displaywin, bottombar, screenwin, colors, tag_pattern
 
     colors = init_colors()
     tag_pattern = create_tag_regex(colors)
+    screenwin = stdscr
 
     screenlines, screencols = curses.LINES, curses.COLS
     curses.halfdelay(1)
@@ -425,41 +446,22 @@ def curseswrapper(stdscr):
 
     while True:
         key = stdscr.getch()
-        if key == curses.KEY_LEFT:
+        if key in (ord('q'), ord('Q'), 27):
+            return "quit"
+        elif key == curses.KEY_LEFT:
             prevhandler()
         elif key == curses.KEY_RIGHT:
+            if menuopen and selectedsong == -1:
+                return "browser"
             nexthandler()
         elif key == curses.KEY_UP:
             uphandler()
         elif key == curses.KEY_DOWN:
             downhandler()
 
-        while not q.empty():
-            item = q.get()
-            if item[:1] in ['/', '.']:
-                setpath(item)
-                loadsongs()
-            elif item[:1].lower() == 'n':
-                nexthandler()
-            elif item[:1].lower() == 'p':
-                prevhandler()
-            elif item[:1].lower() == 'm':
-                menuhandler()
-            q.task_done()
-
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         setpath(sys.argv[1])
-
-    if socket_path.exists():
-        try:
-            socket_path.unlink()
-        except OSError:
-            pass
-
-    server = ThreadedSocketServer(str(socket_path), ThreadedSocketRequestHandler)
-    server_thread = Thread(target=server.serve_forever, daemon=True)
-    server_thread.start()
 
     curses.wrapper(curseswrapper)
